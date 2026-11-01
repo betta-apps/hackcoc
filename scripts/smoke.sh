@@ -1,60 +1,34 @@
 #!/usr/bin/env bash
-# Builds the image from this checkout and boots it with no network and a
-# read-only filesystem, as jiji runs it, then waits for the Dockerfile's
-# HEALTHCHECK and asks nginx for a few paths. CI and deps-factory both run
-# this.
+# The site answers as it did on jiji: the Code of Conduct at /, its assets, a
+# missing page as a 404, the security contact, and the headers jiji's Caddy
+# added. Locally (wrangler dev) unless SMOKE_URL names the live site, as
+# publish.yml does after a deploy. CI and deps-factory both run this.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-name="hackcoc-smoke-$$"
-image="hackcoc-smoke:$$"
+url="${SMOKE_URL:-}"
+if [ -z "$url" ]; then
+  port=8787
+  log="$(mktemp)"
+  npx wrangler dev --port "$port" --ip 127.0.0.1 --show-interactive-dev-session=false >"$log" 2>&1 &
+  dev=$!
+  trap 'kill $dev 2>/dev/null || true; rm -f "$log"' EXIT
+  url="http://127.0.0.1:$port"
+  for _ in $(seq 60); do curl -sf -o /dev/null "$url/" && break; sleep 1; done
+fi
 
-cleanup() {
-  docker rm -f "$name" > /dev/null 2>&1 || true
-  docker image rm "$image" > /dev/null 2>&1 || true
-}
-trap cleanup EXIT
-
-fail() {
-  echo "smoke: $1" >&2
-  docker logs --tail 50 "$name" >&2 || true
-  exit 1
-}
-
-docker build -t "$image" .
-
-# The Dockerfile probes every 60s; every 2s here, so a good boot shows at once.
-docker run -d --name "$name" --network none --read-only --tmpfs /tmp \
-  --health-interval 2s "$image" > /dev/null
-
-state=""
-for _ in $(seq 60); do
-  state="$(docker inspect -f '{{.State.Status}} {{.State.Health.Status}}' "$name")"
-  case "$state" in
-    "running healthy") break ;;
-    "running starting") sleep 1 ;;
-    *) fail "nginx did not come up ($state)." ;;
-  esac
+fail() { echo "smoke: $1" >&2; [ -n "${log:-}" ] && tail -20 "$log" >&2; exit 1; }
+status() { curl -s -o /dev/null -w '%{http_code}' "$url$1"; }
+[ "$(status /)" = 200 ] || fail "/ didn't answer 200"
+[ "$(status /robots.txt)" = 200 ] || fail "/robots.txt didn't answer 200"
+css="$(cd public/assets && ls application.debug-*.css)"
+[ "$(status "/assets/$css")" = 200 ] || fail "/assets/$css didn't answer 200"
+[ "$(status /nope)" = 404 ] || fail "a missing page didn't answer 404"
+[ "$(status /_headers)" = 404 ] || fail "_headers is served as a file"
+curl -s "$url/" | grep "Hack Code of Conduct" >/dev/null || fail "/ is not the Code of Conduct"
+curl -s "$url/.well-known/security.txt" | grep -q '^Contact: mailto:' || fail "security.txt has no contact"
+head="$(curl -sI "$url/")"
+for h in strict-transport-security x-content-type-options x-frame-options referrer-policy permissions-policy; do
+  grep -qi "^$h:" <<< "$head" || fail "/ has no $h header"
 done
-[ "$state" = "running healthy" ] || fail "nginx was not healthy after 60s."
-
-# The status line nginx answers with, asked from inside the container (it has
-# no network). busybox wget follows redirects, so this uses nc.
-status() {
-  docker exec "$name" sh -c "printf 'GET $1 HTTP/1.0\r\nHost: hackcodeofconduct.org\r\n\r\n' | nc 127.0.0.1 8080 | head -1 | tr -d '\r'"
-}
-expect() {
-  local got
-  got="$(status "$1")"
-  [ "$got" = "HTTP/1.1 $2" ] || fail "GET $1 answered '$got', not '$2'."
-}
-
-expect / "200 OK"
-expect /index.html "200 OK"
-expect /robots.txt "200 OK"
-expect "/assets/$(cd assets && ls application.debug-*.css)" "200 OK"
-expect /nope "404 Not Found"
-docker exec "$name" wget -q -O - http://127.0.0.1:8080/ | grep "Hack Code of Conduct" > /dev/null \
-  || fail "/ is not the Code of Conduct."
-
-echo "hackcoc is healthy."
+echo "smoke: ok"

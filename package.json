@@ -1,0 +1,8 @@
+{
+  "name": "hackcoc",
+  "private": true,
+  "description": "hackcodeofconduct.org, served by Cloudflare from public/.",
+  "devDependencies": {
+    "wrangler": "4.152.0"
+  }
+}

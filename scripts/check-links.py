@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Checks that every local link and asset in the site resolves the way the
-image's nginx (nginx.conf) resolves it: the file itself or the same path plus
-.html, and for a path ending in / its index.html or the .html it redirects
-to. Links to other sites are not fetched.
+"""Checks that every local link and asset in a static site resolves the way
+Cloudflare serves its files (public/, html_handling
+auto-trailing-slash): the file itself or the same path plus .html, and for a
+path ending in / its index.html or the .html it redirects to. Links to other
+sites are not fetched.
 
-    check-links.py <site dir> [--known <file>] [own hostname ...]
+    check-links.py <site dir> [--known <file>] [--dir-index] [own hostname ...]
+
+With --dir-index, /x also resolves to x/index.html (Cloudflare redirects it
+to /x/ first).
 
 Absolute links to the site's own hostnames count as local. Targets listed in
 the --known file (one path per line, # for comments) were already broken when
-the site came off Netlify and are reported as a count only. Exits 1 if
+the site was archived and are reported as a count only. Exits 1 if
 anything else is broken."""
 import argparse
 import os
@@ -20,6 +24,7 @@ from urllib.parse import unquote, urljoin, urlsplit
 args = argparse.ArgumentParser()
 args.add_argument("site")
 args.add_argument("--known")
+args.add_argument("--dir-index", action="store_true")
 args.add_argument("hosts", nargs="*")
 args = args.parse_intermixed_args()
 
@@ -40,9 +45,9 @@ class Refs(HTMLParser):
         for name, value in attrs:
             if not value:
                 continue
-            if name in ("href", "src"):
+            if name in ("href", "src", "data-src"):
                 self.refs.append(value.strip())
-            elif name == "srcset":
+            elif name in ("srcset", "data-srcset"):
                 self.refs += [c.split()[0] for c in value.split(",") if c.strip()]
 
 
@@ -52,6 +57,8 @@ def resolves(path):
         return False
     if path.endswith("/"):
         return os.path.isfile(os.path.join(full, "index.html")) or os.path.isfile(full + ".html")
+    if args.dir_index and os.path.isfile(os.path.join(full, "index.html")):
+        return True
     return os.path.isfile(full) or os.path.isfile(full + ".html")
 
 
@@ -79,7 +86,7 @@ for dirpath, _, files in os.walk(root):
 
 new = {p: pages_ for p, pages_ in broken.items() if p not in known}
 old = len(broken) - len(new)
-print(f"{pages} pages checked, {len(broken)} broken local targets ({old} already broken on Netlify).")
+print(f"{pages} pages checked, {len(broken)} broken local targets ({old} already broken before the archive).")
 for path in sorted(new):
     refs = sorted(new[path])
     print(f"  {path}  <- {refs[0]}" + (f" and {len(refs) - 1} more" if len(refs) > 1 else ""))
