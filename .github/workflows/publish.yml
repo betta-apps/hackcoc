@@ -6,8 +6,9 @@ name: Publish to Cloudflare
 # hackcodeofconduct.org serves.
 #
 # The Cloudflare token lives in the production environment alone, which only
-# master can use, and only the Deploy step is given it. Actions are pinned by
-# commit (their version in the comment).
+# master can use, and only the Deploy step is given it, on a GitHub runner
+# that's thrown away after the job. Actions are pinned by commit (their
+# version in the comment).
 
 on:
   push:
@@ -44,7 +45,7 @@ jobs:
     needs: ci
     # A manual run can pick any branch; only master ever deploys.
     if: github.ref == 'refs/heads/master'
-    runs-on: [self-hosted, jiji-ci]
+    runs-on: ubuntu-24.04
     environment: production
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
