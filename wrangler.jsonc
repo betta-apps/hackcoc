@@ -1,0 +1,17 @@
+// hackcodeofconduct.org: static files only, no code, so every request is free
+// and never reaches a script. html_handling auto-trailing-slash serves
+// about.html at /about and about/index.html at /about/. www redirects to the
+// bare domain with the zone's redirect rule, not here.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "hackcoc",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "routes": [{ "pattern": "hackcodeofconduct.org", "custom_domain": true }],
+  "assets": {
+    "directory": "./public",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  },
+  "observability": { "enabled": false }
+}

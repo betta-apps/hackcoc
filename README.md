@@ -4,11 +4,14 @@ See [hackcodeofconduct.org](https://hackcodeofconduct.org)
 
 ## Hosting
 
-The site is plain files (`index.html`, `assets/`, `robots.txt`), served by
-nginx on jiji, Cristiano's home server, behind its Cloudflare tunnel.
-`nginx.conf` keeps Netlify's URL rules.
+The site is plain files in `public/`, served straight from Cloudflare's edge
+by the Worker `hackcoc` (`wrangler.jsonc`): static assets only, no code, so
+it's free. `public/_headers` sets the security headers, and
+`www.hackcodeofconduct.org` redirects to the bare domain with a Cloudflare
+redirect rule.
 
-A push to `master` runs `.github/workflows/publish.yml`: CI, then the image
-`ghcr.io/betta-apps/hackcoc`, which it pins in jiji's `docker-compose.yml` to
-deploy. `scripts/check.sh` checks every local link resolves;
-`scripts/smoke.sh` builds the image and boots it.
+A push to `master` runs `.github/workflows/publish.yml`: CI, then
+`scripts/deploy.sh` (`wrangler deploy`), then `scripts/smoke.sh` against the
+live site. `scripts/check.sh` checks every local link resolves and the files
+fit a Worker's limits; `scripts/smoke.sh` runs the site under `wrangler dev`
+and checks what it answers. Both need `npm ci` first.
