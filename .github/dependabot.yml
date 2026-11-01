@@ -1,17 +1,12 @@
-# deps-factory (betta-apps/deps-factory) owns version updates; the site has no
-# packages, so Dependabot only refreshes the nginx base image's digest and
-# the Actions pins, monthly.
+# deps-factory (betta-apps/deps-factory) owns version updates for wrangler;
+# Dependabot keeps security updates (open-pull-requests-limit 0 turns off only
+# version PRs) and refreshes the Actions pins monthly.
 version: 2
 updates:
-  - package-ecosystem: docker
+  - package-ecosystem: npm
     directory: "/"
-    schedule: { interval: monthly }
-    groups: { base-images: { patterns: ["*"] } }
-    # Fresh digests of the same nginx only. The next stable nginx is a
-    # deliberate upgrade, by hand.
-    ignore:
-      - dependency-name: "*nginxinc/nginx-unprivileged"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 0
   - package-ecosystem: github-actions
     directory: "/"
     schedule: { interval: monthly }
